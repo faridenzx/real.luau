@@ -1,16 +1,19 @@
 local Function = function(...) return ... end
 if not LPH_OBFUSCATED then
-    if LPH_JIT_ULTRA then LPH_JIT_ULTRA = Function end 
+    LPH_JIT_ULTRA = Functio
 end
 local Krypt = setmetatable({},{
     __index = function (self,key)
         return rawget(self,key)
     end,
-    __newindex = function (self, key, value)
+    __newindex = function(self, key, value)
         if type(value) == "function" then
-            return rawset(self,key,LPH_JIT_ULTRA(value))
+            if type(LPH_JIT_ULTRA) == "function" then
+                value = LPH_JIT_ULTRA(value)
+            end
         end
-        return rawset(self,key,value)
+
+        return rawset(self, key, value)
     end
 })
 Krypt.Api = {
