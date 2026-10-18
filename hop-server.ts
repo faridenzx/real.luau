@@ -1,6 +1,6 @@
 local Function = function(...) return ... end
 if not LPH_OBFUSCATED then
-    LPH_JIT_ULTRA = Functio
+    LPH_JIT_ULTRA = Function
 end
 local Krypt = setmetatable({},{
     __index = function (self,key)
@@ -19,13 +19,17 @@ local Krypt = setmetatable({},{
 Krypt.Api = {
     Name = "nil"
 }
-local FILE = Krypt.Api.Name.."/NotSameServers.json"
-function Krypt:Save()
+
+function Krypt:GetFile()
+    return self.Api.Name.."/NotSameServers.json"
+end
+
+function Krypt:Save(visited)
     pcall(function()
-        if makefolder and not isfolder(Krypt.Api.Name) then
-            makefolder(Krypt.Api.Name)
+        if makefolder and not isfolder(self.Api.Name) then
+            makefolder(self.Api.Name)
         end
-        writefile(FILE, game:GetService("HttpService"):JSONEncode(visited))
+        writefile(self:GetFile(), game:GetService("HttpService"):JSONEncode(visited))
     end)
 end
 
@@ -36,14 +40,14 @@ function Krypt:HopServer(maxPlayers : number)
 
     local visited = { hour = hour, ids = {} }
     pcall(function()
-        local data = game:GetService("HttpService"):JSONDecode(readfile(FILE))
+        local data = game:GetService("HttpService"):JSONDecode(readfile(self:GetFile()))
         if type(data) == "table" and data.hour == hour and type(data.ids) == "table" then
             visited = data
         end
     end)
 
     visited.ids[game.JobId] = true
-    self:Save()
+    self:Save(visited)
 
     local cursor = ""
     while true do
@@ -64,7 +68,7 @@ function Krypt:HopServer(maxPlayers : number)
                     and not visited.ids[id] then
 
                     visited.ids[id] = true
-                    self:Save()
+                    self:Save(visited)
 
                     pcall(function()
                         game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", id)
