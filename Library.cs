@@ -4031,7 +4031,7 @@ Components.TitleBar = (function()
 				}),
 
 				New("ImageLabel", {
-					Image = "rbxassetid://86507903120178",
+					Image = "rbxassetid://121283150733936",
 					Size = UDim2.fromOffset(20, 20),
 					BackgroundTransparency = 1,
 					LayoutOrder = 0,
@@ -4392,7 +4392,7 @@ Components.Window = (function()
 
 		Window.ShowSearch = (Config.Search == nil) and true or (Config.Search and true or false)
 
-		local ImageAsset = Config.Image or "rbxassetid://86507903120178"
+		local ImageAsset = Config.Image or "rbxassetid://121283150733936"
 		local hasImage = ImageAsset and type(ImageAsset) == "string" and ImageAsset ~= ""
 		local imageSize = Window.TabWidth - 24
 		local topOffset = 0
