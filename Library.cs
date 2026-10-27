@@ -4031,7 +4031,7 @@ Components.TitleBar = (function()
 				}),
 
 				New("ImageLabel", {
-					Image = "rbxassetid://99118312841228",
+					Image = "rbxassetid://121758414633331",
 					Size = UDim2.fromOffset(20, 20),
 					BackgroundTransparency = 1,
 					LayoutOrder = 0,
@@ -4392,7 +4392,7 @@ Components.Window = (function()
 
 		Window.ShowSearch = (Config.Search == nil) and true or (Config.Search and true or false)
 
-		local ImageAsset = Config.Image or "rbxassetid://99118312841228"
+		local ImageAsset = Config.Image or "rbxassetid://121758414633331"
 		local hasImage = ImageAsset and type(ImageAsset) == "string" and ImageAsset ~= ""
 		local imageSize = Window.TabWidth - 24
 		local topOffset = 0
@@ -8314,53 +8314,32 @@ do
 	Elements.AddToggle = function(self, Idx, Config)
 		local t = origAddToggle(self, Idx, Config)
 		local frame = t.Elements.Frame
-
-		-- ซ่อนตัว Toggle เดิม
 		for _, c in ipairs(frame:GetChildren()) do
 			if c:IsA("Frame") and c.Size == UDim2.fromOffset(18, 18) then
 				c.Visible = false
 			end
 		end
-
-		local check = New("ImageLabel", {
-			Image = "rbxassetid://10709790644",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(16, 16),
-			BackgroundTransparency = 1,
-			ImageTransparency = 1,
-			ThemeTag = { ImageColor3 = "Accent" },
-		})
-
-		local stroke = New("UIStroke", {
-			Thickness = 1.5,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			ThemeTag = { Color = "ToggleSlider" },
-		})
-
-		-- กล่องสี่เหลี่ยม ไม่มีพื้นหลัง
-		New("Frame", {
-			Size = UDim2.fromOffset(20, 20),
+		local thumb = New("Frame", {
+			Size = UDim2.fromOffset(14, 14),
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 3, 0.5, 0),
+		}, { New("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+		local track = New("Frame", {
+			Size = UDim2.fromOffset(36, 20),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -10, 0.5, 0),
-			BackgroundTransparency = 1,
 			Parent = frame,
-		}, {
-			New("UICorner", { CornerRadius = UDim.new(0, 4) }),
-			stroke,
-			check,
-		})
-
+		}, { New("UICorner", { CornerRadius = UDim.new(1, 0) }), thumb })
 		local info = TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		local function update(v)
-			if v then
-				Creator.OverrideTag(stroke, { Color = "Accent" })
-			else
-				Creator.OverrideTag(stroke, { Color = "ToggleSlider" })
-			end
-			TweenService:Create(check, info, { ImageTransparency = v and 0 or 1 }):Play()
+			TweenService:Create(track, info, {
+				BackgroundColor3 = v and Creator.GetThemeProperty("Accent") or Creator.GetThemeProperty("ToggleSlider"),
+			}):Play()
+			TweenService:Create(thumb, info, {
+				Position = UDim2.new(0, v and 19 or 3, 0.5, 0),
+				BackgroundColor3 = v and Color3.fromRGB(10, 10, 12) or Color3.fromRGB(150, 152, 160),
+			}):Play()
 		end
-
 		local origSet = t.SetValue
 		t.SetValue = function(s, v)
 			origSet(s, v)
