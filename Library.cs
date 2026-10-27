@@ -5050,10 +5050,15 @@ Components.Window = (function()
 				Window:UpdateTabHolderLayout()
 			end
 		end
-
+		local MinimizeScale = New("UIScale", { Scale = 1, Parent = Window.Root })
+		local SavedPos = nil
+		local MinimizeBusy = false
 		function Window:Minimize()
-			Window.Minimized = not Window.Minimized
-			Window.Root.Visible = not Window.Minimized
+			if MinimizeBusy then return end
+			MinimizeBusy = true
+
+			local closing = not Window.Minimized
+			Window.Minimized = closing
 
 			for _, Option in next, Library.Options do
 				if Option and Option.Type == "Dropdown" and Option.Opened then
@@ -5063,28 +5068,47 @@ Components.Window = (function()
 				end
 			end
 			if not Library.Island then
-                Library:CreateIsland({ Title = Library.IslandTitle or Config.Title or "Interface" })
-            end
-            Library.Island.SetShown(Window.Minimized)
+				Library:CreateIsland({ Title = Library.IslandTitle or Config.Title or "Interface" })
+			end
+
+			-- จุดกลางของแถบ nav ด้านบน
+			local S = 0.05
+			local W, H = Window.Size.X.Offset, Window.Size.Y.Offset
+			local cx = Library.GUI.AbsoluteSize.X / 2
+			local cy = 10 + 19
+			local TargetPos = UDim2.fromOffset(cx - (W * S) / 2, cy - (H * S) / 2)
+
+			if closing then
+				SavedPos = Window.Root.Position
+				local info = TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+				TweenService:Create(Window.Root, info, { Position = TargetPos }):Play()
+				local t = TweenService:Create(MinimizeScale, info, { Scale = S })
+				t:Play()
+				t.Completed:Connect(function()
+					Window.Root.Visible = false
+					Library.Island.SetShown(true)
+					MinimizeBusy = false
+				end)
+			else
+				Library.Island.SetShown(false)
+				Window.Root.Position = TargetPos
+				MinimizeScale.Scale = S
+				Window.Root.Visible = true
+				local info = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+				TweenService:Create(Window.Root, info, { Position = SavedPos or Window.Position }):Play()
+				local t = TweenService:Create(MinimizeScale, info, { Scale = 1 })
+				t:Play()
+				t.Completed:Connect(function()
+					MinimizeBusy = false
+				end)
+			end
 
 			if not RunService:IsStudio() and Library.Minimizer then
 				pcall(function()
-					if Mobile then
-						local mobileButton = Library.Minimizer:FindFirstChild("TextButton")
-						if mobileButton then
-							local imageLabel = mobileButton:FindFirstChild("ImageLabel")
-							if imageLabel then
-								imageLabel.Image = Window.Minimized and "rbxassetid://10734896384" or "rbxassetid://10734897102"
-							end
-						end
-					else
-						local desktopButton = Library.Minimizer:FindFirstChild("TextButton")
-						if desktopButton then
-							local imageLabel = desktopButton:FindFirstChild("ImageLabel")
-							if imageLabel then
-								imageLabel.Image = Window.Minimized and "rbxassetid://10734896384" or "rbxassetid://10734897102"
-							end
-						end
+					local btn = Library.Minimizer:FindFirstChild("TextButton")
+					local img = btn and btn:FindFirstChild("ImageLabel")
+					if img then
+						img.Image = Window.Minimized and "rbxassetid://10734896384" or "rbxassetid://10734897102"
 					end
 				end)
 			end
@@ -8358,7 +8382,224 @@ if RunService:IsStudio() then
 	writefile = function(...) return ... end;
 	listfiles = function (...) return {...} end;
 end
+do
+	local TS      = game:GetService("TweenService")
+	local Plrs    = game:GetService("Players")
+	local StatsS  = game:GetService("Stats")
+	local RS      = game:GetService("RunService")
 
+	local GREEN  = Color3.fromRGB(74, 222, 128)
+	local AMBER  = Color3.fromRGB(255, 176, 32)
+	local RED    = Color3.fromRGB(248, 113, 113)
+	local ACCENT = Color3.fromRGB(41, 132, 217)
+	local GREY   = Color3.fromRGB(150, 150, 150)
+	local DIM    = Color3.fromRGB(50, 50, 50)
+
+	-- FPS counter (ใช้ร่วมกันทุกการ์ด)
+	local frames, fps = 0, 0
+	RS.RenderStepped:Connect(function() frames += 1 end)
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			fps, frames = frames, 0
+		end
+	end)
+	local startTime = tick()
+
+	-- ชิปสำเร็จรูป: ใส่ชื่อเป็น string ได้เลย
+	local BUILTIN = {
+		FPS = function()
+			return tostring(fps), fps >= 50 and GREEN or (fps >= 30 and AMBER or RED)
+		end,
+		PING = function()
+			local p = 0
+			pcall(function() p = math.floor(StatsS.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+			return p .. "ms", p <= 80 and GREEN or (p <= 150 and AMBER or RED)
+		end,
+		UPTIME = function()
+			local u = math.floor(tick() - startTime)
+			return string.format("%02d:%02d:%02d", u // 3600, (u % 3600) // 60, u % 60), Color3.new(1, 1, 1)
+		end,
+	}
+
+	Elements.AddStatusCard = function(self, Config)
+		Config = Config or {}
+		local LP = Plrs.LocalPlayer
+		local Card = {}
+		local chips, order = {}, {}
+
+		local Frame = New("Frame", {
+			Size = UDim2.new(1, 0, 0, 160),
+			BackgroundTransparency = 0.85,
+			Parent = self.Container,
+			ThemeTag = { BackgroundColor3 = "Element" },
+		}, {
+			New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+			New("UIStroke", { Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, ThemeTag = { Color = "ElementBorder" } }),
+		})
+
+		-- Header
+		local Avatar = New("ImageLabel", {
+			Size = UDim2.fromOffset(48, 48), Position = UDim2.fromOffset(12, 12),
+			BackgroundColor3 = Color3.fromRGB(20, 20, 20), Parent = Frame,
+		}, {
+			New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+			New("UIStroke", { Thickness = 2, Color = ACCENT }),
+		})
+		task.spawn(function()
+			pcall(function()
+				Avatar.Image = Plrs:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+			end)
+		end)
+
+		New("TextLabel", {
+			Text = Config.Title or LP.DisplayName, Font = Enum.Font.GothamBold, TextSize = 16,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Position = UDim2.fromOffset(70, 12), Size = UDim2.new(1, -170, 0, 22),
+			Parent = Frame, ThemeTag = { TextColor3 = "Text" },
+		})
+		New("TextLabel", {
+			Text = Config.Subtitle or ("@" .. LP.Name), Font = Enum.Font.Gotham, TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Position = UDim2.fromOffset(70, 36), Size = UDim2.new(1, -170, 0, 18),
+			Parent = Frame, ThemeTag = { TextColor3 = "SubText" },
+		})
+
+		-- Tag มุมขวาบน (เช่น RACE)
+		local Tag = Config.Tag
+		local TagValue
+		if Tag then
+			TagValue = New("TextLabel", {
+				Text = "-", Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = ACCENT,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Position = UDim2.new(1, -112, 0, 12), Size = UDim2.fromOffset(100, 22), Parent = Frame,
+			})
+			New("TextLabel", {
+				Text = string.upper(Tag.Title or ""), Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = GREY,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Position = UDim2.new(1, -112, 0, 36), Size = UDim2.fromOffset(100, 18), Parent = Frame,
+			})
+		end
+
+		-- Chips
+		local list = Config.Chips or { "FPS", "PING", "UPTIME" }
+		local n = #list
+		local Row = New("Frame", {
+			Position = UDim2.fromOffset(12, 70), Size = UDim2.new(1, -24, 0, 44),
+			BackgroundTransparency = 1, Parent = Frame,
+		}, {
+			New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+		})
+
+		for i, def in ipairs(list) do
+			local title = type(def) == "string" and def or def.Title
+			local get   = type(def) == "table" and def.Get or BUILTIN[title]
+			local box = New("Frame", {
+				Size = UDim2.new(1 / n, -(6 * (n - 1) / n), 1, 0), LayoutOrder = i,
+				BackgroundColor3 = Color3.fromRGB(12, 14, 18), BackgroundTransparency = 0.4, Parent = Row,
+			}, { New("UICorner", { CornerRadius = UDim.new(0, 6) }) })
+			local stroke = New("UIStroke", { Color = DIM, Thickness = 1, Parent = box })
+			New("TextLabel", {
+				Text = string.upper(title), Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = GREY,
+				Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Parent = box,
+			})
+			local value = New("TextLabel", {
+				Text = "-", Font = Enum.Font.RobotoMono, TextSize = 15, TextColor3 = Color3.new(1, 1, 1),
+				Position = UDim2.fromOffset(0, 19), Size = UDim2.new(1, 0, 0, 20), Parent = box,
+			})
+			chips[title] = { value = value, stroke = stroke, get = get, last = nil }
+			table.insert(order, title)
+		end
+
+		-- ตั้งค่าชิปเอง: Card:SetChip("LEVEL", "2550", Color3...)
+		function Card:SetChip(title, text, color)
+			local c = chips[title]
+			if not c then return end
+			text, color = tostring(text), color or Color3.new(1, 1, 1)
+			c.value.TextColor3 = color
+			if c.last ~= text then
+				c.last = text
+				c.value.Text = text
+				c.stroke.Color = color
+				TS:Create(c.stroke, TweenInfo.new(0.7), { Color = DIM }):Play()
+			end
+		end
+
+		-- Status bar
+		local Bar = New("Frame", {
+			Position = UDim2.new(0, 12, 1, -38), Size = UDim2.new(1, -24, 0, 28),
+			BackgroundColor3 = Color3.fromRGB(12, 14, 18), BackgroundTransparency = 0.4,
+			ClipsDescendants = true, Parent = Frame,
+		}, {
+			New("UICorner", { CornerRadius = UDim.new(0, 6) }),
+			New("UIStroke", { Color = Color3.fromRGB(40, 44, 54), Transparency = 0.3 }),
+		})
+
+		local Ring = New("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 16, 0.5, 0),
+			Size = UDim2.fromOffset(9, 9), BackgroundTransparency = 1, Parent = Bar,
+		}, { New("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+		local RingStroke = New("UIStroke", { Thickness = 1.5, Color = GREEN, Transparency = 0.1, Parent = Ring })
+		local pulse = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1)
+		TS:Create(Ring, pulse, { Size = UDim2.fromOffset(24, 24) }):Play()
+		TS:Create(RingStroke, pulse, { Transparency = 1 }):Play()
+
+		local Dot = New("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 16, 0.5, 0),
+			Size = UDim2.fromOffset(9, 9), BackgroundColor3 = GREEN, Parent = Bar,
+		}, { New("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+
+		local Label = New("TextLabel", {
+			Text = "STATUS |  " .. string.upper(Config.Status or "IDLE"), Font = Enum.Font.RobotoMono, TextSize = 12,
+			TextColor3 = Color3.new(1, 1, 1), TextXAlignment = Enum.TextXAlignment.Left,
+			Position = UDim2.fromOffset(36, 0), Size = UDim2.new(1, -44, 1, 0), Parent = Bar,
+		})
+
+		local Sweep = New("Frame", {
+			Size = UDim2.new(0.28, 0, 0, 2), Position = UDim2.new(-0.3, 0, 1, -2),
+			BackgroundColor3 = GREEN, BorderSizePixel = 0, Parent = Bar,
+		}, {
+			New("UIGradient", { Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1),
+			}) }),
+		})
+		TS:Create(Sweep, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1), { Position = UDim2.new(1.02, 0, 1, -2) }):Play()
+
+		-- ตั้งสถานะ: Card:SetStatus("Farming Boss", Color3...)
+		function Card:SetStatus(text, color)
+			color = color or GREEN
+			Label.Text = "STATUS |  " .. string.upper(tostring(text))
+			TS:Create(Dot, TweenInfo.new(0.3), { BackgroundColor3 = color }):Play()
+			TS:Create(Sweep, TweenInfo.new(0.3), { BackgroundColor3 = color }):Play()
+			RingStroke.Color = color
+		end
+
+		function Card:Destroy() Frame:Destroy() end
+
+		-- อัปเดตอัตโนมัติทุก 1 วินาที
+		task.spawn(function()
+			while Frame.Parent and not Library.Unloaded do
+				for _, title in ipairs(order) do
+					local c = chips[title]
+					if c.get then
+						local ok, text, color = pcall(c.get)
+						if ok then Card:SetChip(title, text, color) end
+					end
+				end
+				if Tag and Tag.Get then
+					local ok, v = pcall(Tag.Get)
+					if ok then TagValue.Text = string.upper(tostring(v or "-")) end
+				end
+				task.wait(1)
+			end
+		end)
+
+		-- เรียกจากที่ไหนก็ได้: SetHubStatus("Farming", color)
+		getgenv().SetHubStatus = function(t, c) Card:SetStatus(t, c) end
+
+		return Card
+	end
+end
 local SaveManager = {} do
 
 
